@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
  * connexion.
  */
 class ExempleJDBCTest {
-
   @Test
   void la_lecture_renvoie_les_quatre_taxons_du_fil_rouge() throws SQLException {
     try (Connection connexion = DriverManager.getConnection(ExempleJDBC.URL_MEMOIRE)) {
