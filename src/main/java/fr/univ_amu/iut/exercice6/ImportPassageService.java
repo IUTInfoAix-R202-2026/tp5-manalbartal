@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.List;
 import javax.sql.DataSource;
 
@@ -51,19 +52,57 @@ public class ImportPassageService {
 
     long passageId = -1;
 
-    // TODO exercice 6 : réaliser l'import dans une transaction et renseigner `passageId`.
+    // TODO exercice 6 : réaliser l'import dans une transaction et renseigner
+    // `passageId`.
     //
     // 1. Ouvrir une connexion, puis connexion.setAutoCommit(false).
+    Connection connexion = null;
     // 2. Dans un try :
-    //    - insérer le passage (prepareStatement(sqlPassage, Statement.RETURN_GENERATED_KEYS),
-    //      positionner les paramètres, executeUpdate) ;
-    //    - récupérer l'id généré : keys.next(); passageId = keys.getLong(1) ;
-    //    - pour chaque observation, l'insérer avec ce passageId ;
-    //    - connexion.commit().
-    // 3. catch (SQLException) : connexion.rollback() puis lever une DataAccessException.
-    // 4. finally : refermer la connexion.
-    //
-    // Astuce : ouvrez la connexion AVANT le try afin de pouvoir faire rollback dans le catch.
+    // - insérer le passage (prepareStatement(sqlPassage,
+    // Statement.RETURN_GENERATED_KEYS),
+    // positionner les paramètres, executeUpdate) ;
+    // - récupérer l'id généré : keys.next(); passageId = keys.getLong(1) ;
+    // - pour chaque observation, l'insérer avec ce passageId ;
+    // - connexion.commit().
+    try {
+      connexion = source.getConnection();
+      connexion.setAutoCommit(false);
+
+      try (PreparedStatement psPassage =
+          connexion.prepareStatement(sqlPassage, Statement.RETURN_GENERATED_KEYS)) {
+        psPassage.setString(1, numeroCarre);
+        psPassage.setString(2, codePoint);
+        psPassage.setInt(3, numeroPassage);
+        psPassage.setInt(4, annee);
+        psPassage.executeUpdate();
+
+        try (ResultSet generatedKeys = psPassage.getGeneratedKeys()) {
+          if (generatedKeys.next()) {
+            passageId = generatedKeys.getLong(1);
+          } else {
+            throw new SQLException("Aucun identifiant de passage généré");
+          }
+        }
+      }
+      try (PreparedStatement psObservation = connexion.prepareStatement(sqlObservation)) {
+        for (ObservationAImporter observation : observations) {
+          psObservation.setLong(1, passageId);
+          psObservation.setDouble(2, observation.tempsDebut());
+          psObservation.setDouble(3, observation.tempsFin());
+          psObservation.setInt(4, observation.frequenceMediane());
+          psObservation.setString(5, observation.codeTaxon());
+          psObservation.setDouble(6, observation.probabilite());
+          psObservation.executeUpdate();
+        }
+      }
+      connexion.commit();
+
+    } catch (SQLException e) {
+      annulerSilencieusement(connexion);
+      throw new DataAccessException("Impossible d'importer le passage", e);
+    } finally {
+      fermerSilencieusement(connexion);
+    }
 
     return passageId;
   }
